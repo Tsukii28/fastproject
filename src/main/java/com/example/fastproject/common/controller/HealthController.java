@@ -1,5 +1,6 @@
 package com.example.fastproject.common.controller;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -13,15 +14,11 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1")
+@RequiredArgsConstructor
 public class HealthController {
 
     private final StringRedisTemplate redisTemplate;
     private final JdbcTemplate jdbcTemplate;
-
-    public HealthController(StringRedisTemplate redisTemplate, JdbcTemplate jdbcTemplate) {
-        this.redisTemplate = redisTemplate;
-        this.jdbcTemplate = jdbcTemplate;
-    }
 
     @GetMapping("/ping")
     public ResponseEntity<?> ping() {

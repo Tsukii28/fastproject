@@ -1,4 +1,4 @@
-package com.example.fastproject.modules.url;
+package com.example.fastproject.modules.url.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
