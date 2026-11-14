@@ -51,7 +51,7 @@ public class UrlController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @GetMapping("/{shortCode}")
+    @GetMapping("/{shortCode:[a-zA-Z0-9_-]+}")
     public ResponseEntity<Void> redirect(@PathVariable String shortCode, HttpServletRequest request) {
         String originalUrl = urlShortenerService.resolveOriginalUrl(shortCode);
 

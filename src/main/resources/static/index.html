@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SnapLink — Rút gọn URL & Phân tích thời gian thực</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col selection:bg-indigo-500 selection:text-white">
+
+    <!-- Top Navigation -->
+    <header class="border-b border-slate-800/80 bg-slate-900/50 backdrop-blur-md sticky top-0 z-10">
+        <div class="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+                <div
+                    class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/30">
+                    S
+                </div>
+                <span class="font-bold text-lg tracking-tight">Snap<span class="text-indigo-400">Link</span></span>
+            </div>
+            <div class="flex items-center gap-4 text-xs text-slate-400">
+                <span id="systemStatus"
+                    class="flex items-center gap-1.5 bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700/60">
+                    <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                    Đang kiểm tra hệ thống...
+                </span>
+                <a href="/swagger-ui/index.html" target="_blank"
+                    class="hover:text-indigo-400 transition hidden sm:inline">API Docs ↗</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-4xl w-full mx-auto px-4 py-10 space-y-8">
+
+        <!-- Hero Section -->
+        <section class="text-center space-y-3">
+            <h1
+                class="text-3xl sm:text-4xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">
+                Rút gọn liên kết. Đo lường tức thì.
+            </h1>
+            <p class="text-slate-400 text-sm sm:text-base max-w-xl mx-auto">
+                Chuyển hướng tốc độ cao với bộ nhớ đệm Redis và hệ thống phân tích lượt truy cập bất đồng bộ.
+            </p>
+        </section>
+
+        <!-- Shorten Card -->
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl shadow-black/40">
+            <form id="shortenForm" class="space-y-4">
+                <div>
+                    <label for="originalUrl"
+                        class="block text-xs font-medium uppercase tracking-wider text-slate-400 mb-2">
+                        Đường dẫn gốc (URL) <span class="text-rose-400">*</span>
+                    </label>
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <input type="url" id="originalUrl" required
+                            placeholder="https://example.com/duong-dan-rat-dai-can-rut-gon..."
+                            class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition">
+                        <button type="submit" id="submitBtn"
+                            class="bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] text-white font-semibold px-6 py-3 rounded-xl text-sm transition shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 whitespace-nowrap">
+                            <span>Rút gọn ngay</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Optional Parameters -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-800/80">
+                    <div>
+                        <label for="customAlias" class="block text-xs font-medium text-slate-400 mb-1.5">
+                            Mã tùy chỉnh (Tùy chọn, 4–30 ký tự)
+                        </label>
+                        <div
+                            class="flex items-center bg-slate-950 border border-slate-800 rounded-xl px-3 focus-within:border-indigo-500 transition">
+                            <span class="text-slate-500 text-xs mono select-none"
+                                id="domainPrefix">localhost:8080/</span>
+                            <input type="text" id="customAlias" minlength="4" maxlength="30" placeholder="ten-rieng"
+                                class="w-full bg-transparent py-2.5 px-1 text-sm text-white mono placeholder-slate-600 focus:outline-none">
+                        </div>
+                    </div>
+                    <div>
+                        <label for="expiresAt" class="block text-xs font-medium text-slate-400 mb-1.5">
+                            Thời gian hết hạn (Tùy chọn)
+                        </label>
+                        <input type="datetime-local" id="expiresAt"
+                            class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-300 focus:outline-none focus:border-indigo-500 transition">
+                    </div>
+                </div>
+            </form>
+
+            <!-- Alert Box (Error / Rate Limit) -->
+            <div id="errorAlert"
+                class="hidden mt-4 p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm">
+                <p id="errorMessage" class="font-medium"></p>
+                <ul id="errorDetails" class="mt-1.5 list-disc list-inside text-xs text-rose-400 space-y-0.5"></ul>
+            </div>
+
+            <!-- Result Box -->
+            <div id="resultBox"
+                class="hidden mt-5 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div class="space-y-1 min-w-0">
+                    <span class="text-xs font-medium text-emerald-400 uppercase tracking-wider">Liên kết rút gọn sẵn
+                        sàng</span>
+                    <div class="flex items-center gap-2">
+                        <a id="shortUrlLink" href="#" target="_blank"
+                            class="text-base sm:text-lg font-semibold text-white hover:text-indigo-300 underline decoration-indigo-500/50 truncate mono"></a>
+                    </div>
+                    <p id="originalUrlPreview" class="text-xs text-slate-400 truncate"></p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button type="button" id="copyBtn"
+                        class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-white border border-slate-700 transition">
+                        Sao chép
+                    </button>
+                    <button type="button" id="inspectBtn"
+                        class="px-4 py-2 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-xs font-medium text-indigo-300 border border-indigo-500/30 transition">
+                        Xem thống kê
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Analytics Section -->
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-base font-semibold text-white">Tra cứu thống kê (Analytics)</h2>
+                    <p class="text-xs text-slate-400">Nhập mã rút gọn (shortCode) để xem tổng lượt truy cập và nhật ký
+                        thiết bị</p>
+                </div>
+                <div class="flex gap-2">
+                    <input type="text" id="statsCodeInput" placeholder="VD: springboot"
+                        class="bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-white mono placeholder-slate-600 focus:outline-none focus:border-indigo-500 w-40">
+                    <button type="button" id="fetchStatsBtn"
+                        class="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl text-xs font-medium border border-slate-700 transition">
+                        Tra cứu
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stats Content -->
+            <div id="statsContent" class="hidden space-y-4 pt-4 border-t border-slate-800">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="bg-slate-950 border border-slate-800/80 rounded-xl p-4">
+                        <span class="text-xs text-slate-400">Mã rút gọn</span>
+                        <p id="statShortCode" class="text-xl font-bold text-indigo-400 mono mt-1">-</p>
+                    </div>
+                    <div class="bg-slate-950 border border-slate-800/80 rounded-xl p-4">
+                        <span class="text-xs text-slate-400">Tổng lượt click</span>
+                        <p id="statTotalClicks" class="text-xl font-bold text-emerald-400 mt-1">0</p>
+                    </div>
+                    <div class="bg-slate-950 border border-slate-800/80 rounded-xl p-4">
+                        <span class="text-xs text-slate-400">Ngày tạo</span>
+                        <p id="statCreatedAt" class="text-sm font-medium text-slate-200 mt-2">-</p>
+                    </div>
+                </div>
+
+                <!-- Recent Clicks Table -->
+                <div class="overflow-x-auto rounded-xl border border-slate-800">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-950 text-slate-400 uppercase">
+                            <tr>
+                                <th class="px-4 py-3">Thời gian</th>
+                                <th class="px-4 py-3">Địa chỉ IP</th>
+                                <th class="px-4 py-3">Trình duyệt / Thiết bị (User-Agent)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recentClicksTable" class="divide-y divide-slate-800/80 bg-slate-900/40">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="statsEmpty"
+                class="text-center py-8 text-xs text-slate-500 border border-dashed border-slate-800 rounded-xl">
+                Chưa có dữ liệu thống kê được chọn. Hãy tạo một link mới hoặc nhập mã rút gọn ở góc trên.
+            </div>
+        </section>
+    </main>
+
+    <script>
+        document.getElementById('domainPrefix').textContent = window.location.host + '/';
+
+        // 1. Kiểm tra trạng thái hệ thống (/api/v1/ping)
+        async function checkHealth() {
+            const statusEl = document.getElementById('systemStatus');
+            try {
+                const res = await fetch('/api/v1/ping');
+                const data = await res.json();
+                if (data.postgresStatus === 'CONNECTED' && data.redisStatus === 'CONNECTED') {
+                    statusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> PostgreSQL & Redis: Sẵn sàng`;
+                } else {
+                    statusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-rose-400"></span> Lỗi kết nối hạ tầng`;
+                }
+            } catch {
+                statusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-rose-400"></span> Mất kết nối Server`;
+            }
+        }
+        checkHealth();
+
+        // 2. Xử lý Form rút gọn link (POST /api/v1/urls)
+        const shortenForm = document.getElementById('shortenForm');
+        const errorAlert = document.getElementById('errorAlert');
+        const resultBox = document.getElementById('resultBox');
+        let currentShortCode = '';
+
+        shortenForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorAlert.classList.add('hidden');
+            resultBox.classList.add('hidden');
+
+            const originalUrl = document.getElementById('originalUrl').value.trim();
+            const customAlias = document.getElementById('customAlias').value.trim();
+            const expiresAt = document.getElementById('expiresAt').value;
+
+            const payload = { originalUrl };
+            if (customAlias) payload.customAlias = customAlias;
+            if (expiresAt) payload.expiresAt = expiresAt;
+
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Đang xử lý...';
+
+            try {
+                const res = await fetch('/api/v1/urls', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    document.getElementById('errorMessage').textContent = data.message || 'Có lỗi xảy ra';
+                    const detailsList = document.getElementById('errorDetails');
+                    detailsList.innerHTML = '';
+                    if (data.details) {
+                        Object.values(data.details).forEach(msg => {
+                            const li = document.createElement('li');
+                            li.textContent = msg;
+                            detailsList.appendChild(li);
+                        });
+                    }
+                    errorAlert.classList.remove('hidden');
+                    return;
+                }
+
+                currentShortCode = data.shortCode;
+                const linkEl = document.getElementById('shortUrlLink');
+                linkEl.href = data.shortUrl;
+                linkEl.textContent = data.shortUrl;
+                document.getElementById('originalUrlPreview').textContent = 'Đích đến: ' + data.originalUrl;
+                resultBox.classList.remove('hidden');
+
+                // Tự động điền sang ô tra cứu thống kê
+                document.getElementById('statsCodeInput').value = data.shortCode;
+                loadStats(data.shortCode);
+            } catch (err) {
+                document.getElementById('errorMessage').textContent = 'Không thể kết nối tới máy chủ Backend.';
+                errorAlert.classList.remove('hidden');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Rút gọn ngay';
+            }
+        });
+
+        // 3. Nút Copy nhanh
+        document.getElementById('copyBtn').addEventListener('click', () => {
+            const urlText = document.getElementById('shortUrlLink').textContent;
+            navigator.clipboard.writeText(urlText);
+            const btn = document.getElementById('copyBtn');
+            btn.textContent = 'Đã sao chép ✓';
+            setTimeout(() => btn.textContent = 'Sao chép', 2000);
+        });
+
+        // 4. Tra cứu thống kê (GET /api/v1/urls/{shortCode}/stats)
+        async function loadStats(code) {
+            if (!code) return;
+            errorAlert.classList.add('hidden');
+            try {
+                const res = await fetch(`/api/v1/urls/${encodeURIComponent(code)}/stats`);
+                const data = await res.json();
+
+                if (!res.ok) {
+                    document.getElementById('errorMessage').textContent = data.message || 'Không tìm thấy mã rút gọn';
+                    document.getElementById('errorDetails').innerHTML = '';
+                    errorAlert.classList.remove('hidden');
+                    return;
+                }
+
+                document.getElementById('statsEmpty').classList.add('hidden');
+                document.getElementById('statsContent').classList.remove('hidden');
+
+                document.getElementById('statShortCode').textContent = data.shortCode;
+                document.getElementById('statTotalClicks').textContent = data.totalClicks;
+                document.getElementById('statCreatedAt').textContent = new Date(data.createdAt).toLocaleString('vi-VN');
+
+                const tbody = document.getElementById('recentClicksTable');
+                tbody.innerHTML = '';
+                if (!data.recentClicks || data.recentClicks.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="3" class="px-4 py-4 text-center text-slate-500">Chưa có lượt truy cập nào. Hãy click thử vào link rút gọn ở trên!</td></tr>`;
+                } else {
+                    data.recentClicks.forEach(click => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td class="px-4 py-2.5 text-slate-300 whitespace-nowrap">${new Date(click.clickedAt).toLocaleString('vi-VN')}</td>
+                            <td class="px-4 py-2.5 text-indigo-300 mono">${click.ipAddress || 'N/A'}</td>
+                            <td class="px-4 py-2.5 text-slate-400 truncate max-w-xs" title="${click.userAgent || ''}">${click.userAgent || 'Unknown'}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+            } catch {
+                document.getElementById('errorMessage').textContent = 'Lỗi khi tải dữ liệu thống kê.';
+                errorAlert.classList.remove('hidden');
+            }
+        }
+
+        document.getElementById('fetchStatsBtn').addEventListener('click', () => {
+            loadStats(document.getElementById('statsCodeInput').value.trim());
+        });
+
+        document.getElementById('inspectBtn').addEventListener('click', () => {
+            if (currentShortCode) loadStats(currentShortCode);
+        });
+    </script>
+</body>
+
+</html>
